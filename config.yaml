@@ -1,2 +1,2 @@
-path: "path_to_model.joblib
-features: ['feature_A', 'feature_B']
+selected_features: ["PPE", "spread1"]
+path: "parkinsons_model.joblib"
