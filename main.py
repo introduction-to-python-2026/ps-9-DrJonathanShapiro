@@ -1,59 +1,63 @@
 import pandas as pd
-import numpy as np
 import joblib
 
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import MinMaxScaler
-from sklearn.svm import SVC
-from sklearn.metrics import accuracy_score
+
+def read_config_yaml(path="config.yaml"):
+    """
+    Minimal YAML reader for exactly this format:
+
+    selected_features: ["PPE", "spread1"]
+    path: "parkinsons_model.joblib"
+    """
+    selected_features = None
+    model_path = None
+
+    with open(path, "r") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+
+            if line.startswith("selected_features:"):
+                # everything after the colon is the list
+                rhs = line.split(":", 1)[1].strip()
+                # rhs looks like ["PPE", "spread1"]
+                rhs = rhs.strip().lstrip("[").rstrip("]")
+                parts = [p.strip().strip('"').strip("'") for p in rhs.split(",") if p.strip()]
+                selected_features = parts
+
+            if line.startswith("path:"):
+                rhs = line.split(":", 1)[1].strip()
+                model_path = rhs.strip('"').strip("'")
+
+    if selected_features is None or model_path is None:
+        raise ValueError("config.yaml must contain selected_features and path")
+
+    return selected_features, model_path
 
 
 def main():
+    # Read config.yaml
+    selected_features, model_path = read_config_yaml("config.yaml")
+
     # Load dataset
     df = pd.read_csv("parkinsons.csv")
 
-    # Target column
-    if "status" in df.columns:
-        target_col = "status"
-    else:
-        target_col = [c for c in df.columns if df[c].nunique() == 2][0]
+    # Load trained model bundle
+    bundle = joblib.load(model_path)
 
-    y = df[target_col].astype(int)
+    model = bundle["model"]
+    scaler = bundle["scaler"]
 
-    # Select features (must match config.yaml)
-    selected_features = ["PPE", "spread1"]
+    # (target_col may or may not exist in bundle; not needed for predicting)
     X = df[selected_features]
+    X_scaled = scaler.transform(X)
 
-    # Split data
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42, stratify=y
-    )
+    preds = model.predict(X_scaled)
 
-    # Scale data
-    scaler = MinMaxScaler()
-    X_train_scaled = scaler.fit_transform(X_train)
-    X_test_scaled = scaler.transform(X_test)
-
-    # Train model
-    model = SVC(kernel="rbf", C=10, gamma="scale", random_state=42)
-    model.fit(X_train_scaled, y_train)
-
-    # Evaluate
-    acc = accuracy_score(y_test, model.predict(X_test_scaled))
-    print("Accuracy:", acc)
-
-    # Save model
-    bundle = {
-        "model": model,
-        "scaler": scaler,
-        "selected_features": selected_features,
-        "target_col": target_col
-    }
-
-    joblib.dump(bundle, "parkinsons_model.joblib")
-    print("Saved parkinsons_model.joblib")
+    # Keep output minimal
+    print(len(preds))
 
 
 if __name__ == "__main__":
     main()
-
